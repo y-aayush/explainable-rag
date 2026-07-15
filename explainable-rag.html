@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TRACE — Transparent Retrieval &amp; Answer Confidence Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F7F7F5;
+    --surface:#FFFFFF;
+    --ink:#1A1D23;
+    --ink-soft:#5B5F66;
+    --ink-faint:#9A9D9F;
+    --line:#DEDCD3;
+    --steel:#3D5A80;
+    --steel-soft:#E7EDF4;
+    --evidence:#2E7D5B;
+    --evidence-soft:#E4F0EA;
+    --amber:#B8862F;
+    --amber-soft:#F5EBDA;
+    --brick:#B34A3C;
+    --brick-soft:#F5E4E1;
+    --mono:'IBM Plex Mono',monospace;
+    --sans:'IBM Plex Sans',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+  ::selection{background:var(--steel);color:#fff;}
+
+  .shell{max-width:1180px;margin:0 auto;padding:36px 28px 90px;}
+
+  /* header */
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:24px;border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:28px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:baseline;gap:14px;}
+  .brand .mark{font-family:var(--mono);font-weight:700;font-size:26px;letter-spacing:2px;}
+  .brand .mark span{color:var(--steel);}
+  .brand .full{font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.5px;text-transform:uppercase;}
+  header p.tag{font-family:var(--sans);color:var(--ink-soft);font-size:13.5px;max-width:360px;line-height:1.5;margin:0;}
+
+  /* pipeline stepper */
+  .pipeline{display:flex;align-items:stretch;gap:0;margin-bottom:32px;border:1px solid var(--line);background:var(--surface);border-radius:10px;overflow:hidden;}
+  .pstep{flex:1;padding:14px 10px;text-align:center;position:relative;border-right:1px solid var(--line);transition:background .35s ease, color .35s ease;}
+  .pstep:last-child{border-right:none;}
+  .pstep .n{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);display:block;margin-bottom:4px;letter-spacing:1px;}
+  .pstep .label{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink-soft);letter-spacing:.3px;}
+  .pstep.active{background:var(--steel);}
+  .pstep.active .n,.pstep.active .label{color:#fff;}
+  .pstep.done{background:var(--steel-soft);}
+  .pstep.done .label{color:var(--steel);}
+  .pstep.done .n{color:var(--steel);}
+
+  /* question form */
+  .qform{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:8px;}
+  .qform label{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:8px;}
+  .qrow{display:flex;gap:10px;}
+  .qrow input{flex:1;font-family:var(--sans);font-size:15px;padding:12px 14px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);}
+  .qrow input:focus{outline:2px solid var(--steel);outline-offset:1px;}
+  .qrow button{font-family:var(--mono);font-weight:600;font-size:13px;letter-spacing:.5px;background:var(--ink);color:#fff;border:none;border-radius:7px;padding:0 22px;cursor:pointer;transition:background .2s;}
+  .qrow button:hover{background:var(--steel);}
+  .qrow button:disabled{background:var(--ink-faint);cursor:progress;}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+  .chip{font-family:var(--sans);font-size:12.5px;color:var(--ink-soft);background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:6px 13px;cursor:pointer;transition:all .15s;}
+  .chip:hover{border-color:var(--steel);color:var(--steel);}
+
+  .error-box{display:none;margin-top:14px;background:var(--brick-soft);border:1px solid var(--brick);color:var(--brick);border-radius:7px;padding:12px 14px;font-size:13.5px;font-family:var(--sans);}
+
+  /* results */
+  #results{display:none;margin-top:32px;}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px;margin-bottom:20px;}
+  .panel h2{font-family:var(--mono);font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 16px;display:flex;align-items:center;gap:8px;}
+  .panel h2 .dot{width:7px;height:7px;border-radius:50%;background:var(--steel);display:inline-block;}
+
+  /* retrieval spectrum */
+  .spectrum-row{display:grid;grid-template-columns:190px 1fr 70px;gap:12px;align-items:center;padding:6px 0;font-size:13px;}
+  .spectrum-row .title{font-family:var(--sans);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .spectrum-row.retrieved .title{font-weight:600;}
+  .bar-track{background:var(--bg);border-radius:5px;height:16px;position:relative;overflow:hidden;border:1px solid var(--line);}
+  .bar-fill{height:100%;border-radius:5px 0 0 5px;background:var(--ink-faint);}
+  .spectrum-row.retrieved .bar-fill{background:var(--steel);}
+  .spectrum-row .score{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);text-align:right;}
+  .threshold-note{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);border-top:1px dashed var(--line);margin:10px 0 4px;padding-top:8px;letter-spacing:.3px;}
+
+  .doc-card{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-top:10px;}
+  .doc-card.retrieved{border-color:var(--steel);background:var(--steel-soft);}
+  .doc-card.rejected{background:var(--bg);}
+  .doc-card .dtitle{font-weight:600;font-size:14px;margin-bottom:4px;}
+  .doc-card .dtext{font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-bottom:8px;}
+  .doc-card .why{font-family:var(--mono);font-size:11px;line-height:1.6;}
+  .doc-card.retrieved .why{color:var(--steel);}
+  .doc-card.rejected .why{color:var(--brick);}
+  .term-chip{display:inline-block;background:rgba(0,0,0,.06);border-radius:4px;padding:1px 6px;margin:0 2px;font-family:var(--mono);}
+
+  /* answer */
+  .answer-text{font-size:15.5px;line-height:1.65;color:var(--ink);margin-bottom:16px;}
+  .meta-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;}
+  .metric{border:1px solid var(--line);border-radius:8px;padding:12px 16px;flex:1;min-width:150px;background:var(--bg);}
+  .metric .mlabel{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);margin-bottom:6px;}
+  .metric .mval{font-family:var(--mono);font-size:26px;font-weight:700;}
+  .gauge-track{height:8px;background:var(--line);border-radius:4px;margin-top:8px;overflow:hidden;}
+  .gauge-fill{height:100%;border-radius:4px;}
+
+  .claim{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line);}
+  .claim:first-child{border-top:none;}
+  .claim .flag{flex-shrink:0;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:700;margin-top:1px;}
+  .claim.supported .flag{background:var(--evidence-soft);color:var(--evidence);}
+  .claim.unsupported .flag{background:var(--brick-soft);color:var(--brick);}
+  .claim .ctext{font-size:13.5px;line-height:1.5;}
+  .claim .cnote{font-size:11.5px;color:var(--ink-faint);font-family:var(--mono);margin-top:3px;}
+
+  .trace-step{position:relative;padding:0 0 18px 26px;border-left:2px solid var(--line);}
+  .trace-step:last-child{border-left-color:transparent;padding-bottom:0;}
+  .trace-step::before{content:'';position:absolute;left:-6px;top:2px;width:10px;height:10px;border-radius:50%;background:var(--steel);border:2px solid var(--surface);}
+  .trace-step .tnum{font-family:var(--mono);font-size:10px;color:var(--ink-faint);letter-spacing:.5px;}
+  .trace-step .ttext{font-size:13.5px;color:var(--ink);line-height:1.5;margin-top:2px;}
+
+  .skeleton{opacity:.5;font-family:var(--mono);font-size:12.5px;color:var(--ink-faint);padding:20px 0;text-align:center;}
+
+  footer{margin-top:40px;font-family:var(--mono);font-size:11px;color:var(--ink-faint);text-align:center;letter-spacing:.3px;}
+
+  @media (max-width:720px){
+    .pipeline{flex-wrap:wrap;}
+    .pstep{flex:1 1 33%;border-bottom:1px solid var(--line);}
+    .spectrum-row{grid-template-columns:110px 1fr 50px;font-size:11.5px;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="brand">
+      <div class="mark">TR<span>A</span>CE</div>
+      <div class="full">Transparent Retrieval &amp;<br>Answer Confidence Engine</div>
+    </div>
+    <p class="tag">A RAG pipeline that shows its work: why each document was pulled or passed over, where the answer is grounded, and where it isn't.</p>
+  </header>
+
+  <div class="pipeline" id="pipeline">
+    <div class="pstep" data-step="question"><span class="n">01</span><span class="label">Question</span></div>
+    <div class="pstep" data-step="retriever"><span class="n">02</span><span class="label">Retriever</span></div>
+    <div class="pstep" data-step="documents"><span class="n">03</span><span class="label">Documents</span></div>
+    <div class="pstep" data-step="llm"><span class="n">04</span><span class="label">LLM</span></div>
+    <div class="pstep" data-step="answer"><span class="n">05</span><span class="label">Answer</span></div>
+    <div class="pstep" data-step="explanation"><span class="n">06</span><span class="label">Explanation</span></div>
+  </div>
+
+  <div class="qform">
+    <label for="qinput">Ask a question against the 20-document demo corpus</label>
+    <div class="qrow">
+      <input id="qinput" type="text" placeholder="e.g. How does Rust manage memory without a garbage collector?" autocomplete="off">
+      <button id="runBtn">Run</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <div id="results">
+
+    <div class="panel">
+      <h2><span class="dot"></span>Retrieval — similarity spectrum</h2>
+      <div id="spectrum"></div>
+      <div class="threshold-note" id="thresholdNote"></div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="dot"></span>Documents — retrieved &amp; rejected</h2>
+      <div id="docExplain"></div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="dot"></span>Answer</h2>
+      <div class="answer-text" id="answerText"></div>
+      <div class="meta-row">
+        <div class="metric">
+          <div class="mlabel">Confidence</div>
+          <div class="mval" id="confVal">—</div>
+          <div class="gauge-track"><div class="gauge-fill" id="confGauge" style="background:var(--evidence);width:0%"></div></div>
+        </div>
+        <div class="metric">
+          <div class="mlabel">Hallucination probability</div>
+          <div class="mval" id="halVal">—</div>
+          <div class="gauge-track"><div class="gauge-fill" id="halGauge" style="background:var(--brick);width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="dot"></span>Claim-level grounding</h2>
+      <div id="claims"></div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="dot"></span>Reasoning path</h2>
+      <div id="trace"></div>
+    </div>
+
+  </div>
+
+  <footer>tf-idf retrieval computed locally in-browser · answer + grounding via claude-sonnet-4-6</footer>
+</div>
+
+<script>
+/* ---------------------------------------------------------------
+   CORPUS — 5 topics × 4 short original reference docs (20 total),
+   written to include overlapping vocabulary so retrieval has to
+   make real distinctions.
+----------------------------------------------------------------*/
+const CORPUS = [
+  {id:"mars", topic:"Solar System", title:"Mars", text:"Mars is the fourth planet from the Sun, a cold desert world with a thin carbon dioxide atmosphere. Its rust-red surface comes from iron oxide dust. Mars hosts the largest known volcano in the solar system, Olympus Mons, and evidence of ancient riverbeds suggests liquid water once flowed there. Two small moons, Phobos and Deimos, orbit the planet."},
+  {id:"jupiter", topic:"Solar System", title:"Jupiter", text:"Jupiter is the largest planet in the solar system, a gas giant composed mainly of hydrogen and helium. Its atmosphere features powerful storm bands and the Great Red Spot, a storm larger than Earth that has raged for centuries. Jupiter has dozens of moons, including Europa, which may hide a liquid ocean beneath its icy shell."},
+  {id:"saturn", topic:"Solar System", title:"Saturn's Rings", text:"Saturn is best known for its extensive ring system, made of countless particles of ice and rock ranging from dust grains to boulders. Like Jupiter, Saturn is a gas giant dominated by hydrogen and helium, with fast atmospheric winds. Its moon Titan has a thick atmosphere and lakes of liquid methane."},
+  {id:"moon", topic:"Solar System", title:"Earth's Moon", text:"Earth's Moon is thought to have formed from debris after a Mars-sized body collided with early Earth. It has no atmosphere to speak of, so its surface is scarred by impact craters that persist for billions of years. The Moon's gravity is the primary driver of ocean tides on Earth."},
+
+  {id:"python", topic:"Programming", title:"Python", text:"Python is a high-level, dynamically typed programming language known for readable syntax and a large standard library. It uses automatic memory management through reference counting and a garbage collector to reclaim unused memory. Python is widely used in data science, scripting, and web backends, and it runs code through an interpreter rather than compiling to native machine code."},
+  {id:"javascript", topic:"Programming", title:"JavaScript", text:"JavaScript is a dynamically typed language originally built for web browsers and now also used on servers via runtimes like Node.js. It relies on a garbage-collected memory model and an event loop for handling asynchronous operations such as network requests. JavaScript engines compile code just-in-time for performance."},
+  {id:"rust", topic:"Programming", title:"Rust", text:"Rust is a systems programming language designed for memory safety without a garbage collector. Instead, it enforces an ownership model at compile time, tracking which part of the code owns a piece of memory and freeing it automatically when that owner goes out of scope. This lets Rust programs avoid common bugs like use-after-free while still compiling to fast native machine code."},
+  {id:"go", topic:"Programming", title:"Go", text:"Go, also called Golang, is a compiled language created at Google for building simple, reliable concurrent software. It uses a garbage collector for automatic memory management, similar to Python and JavaScript, but compiles directly to native machine code for speed. Goroutines, Go's lightweight concurrency feature, make it popular for network services."},
+
+  {id:"rome", topic:"Ancient Civilizations", title:"The Roman Empire", text:"The Roman Empire grew from a city-state into a power spanning the Mediterranean, North Africa, and much of Europe. Its collapse in the west during the 5th century CE is attributed to a mix of factors: economic strain, overextended borders, repeated invasions by groups such as the Visigoths and Vandals, and internal political instability. The eastern half survived for another thousand years as the Byzantine Empire."},
+  {id:"egypt", topic:"Ancient Civilizations", title:"Ancient Egypt", text:"Ancient Egyptian civilization developed along the Nile River, whose predictable annual floods supported reliable agriculture. Egyptians built monumental architecture, including the pyramids at Giza, and developed one of the earliest writing systems, hieroglyphics. Pharaohs ruled as god-kings, and elaborate burial practices, including mummification, reflected strong beliefs about the afterlife."},
+  {id:"greece", topic:"Ancient Civilizations", title:"Ancient Greece", text:"Ancient Greece was organized into independent city-states such as Athens and Sparta, each with its own government and customs. Athens is credited with developing an early form of democracy, while Greek philosophers, playwrights, and mathematicians produced work that shaped later Western thought. Greek city-states often warred with each other but united temporarily against Persian invasions."},
+  {id:"maya", topic:"Ancient Civilizations", title:"The Maya Civilization", text:"The Maya civilization flourished in present-day Mexico and Central America, known for advanced astronomy, a sophisticated calendar system, and a written script of hieroglyphs. Maya cities featured stepped pyramids and plazas. Around the 9th century CE, many southern lowland cities were abandoned, a decline linked to prolonged drought, warfare, and resource strain rather than a single cause."},
+
+  {id:"warming", topic:"Climate", title:"Global Warming", text:"Global warming refers to the long-term rise in Earth's average surface temperature, driven mainly by increased greenhouse gas concentrations from burning fossil fuels. Gases like carbon dioxide trap heat in the atmosphere, intensifying the natural greenhouse effect. Consequences include melting ice sheets, rising sea levels, and more frequent extreme weather events."},
+  {id:"renewable", topic:"Climate", title:"Renewable Energy", text:"Renewable energy comes from sources that replenish naturally, such as sunlight, wind, and flowing water. Solar panels and wind turbines have fallen sharply in cost over the past decade, making them increasingly competitive with fossil fuels. Expanding renewable energy is a central strategy for reducing the greenhouse gas emissions that drive global warming."},
+  {id:"ocean-acid", topic:"Climate", title:"Ocean Acidification", text:"Ocean acidification occurs as seawater absorbs excess atmospheric carbon dioxide, lowering the ocean's pH over time. This chemical shift makes it harder for shellfish, corals, and some plankton to build calcium carbonate shells and skeletons. Unlike surface warming, acidification is a direct chemical consequence of rising CO2 rather than a heat-trapping effect."},
+  {id:"deforestation", topic:"Climate", title:"Deforestation", text:"Deforestation is the large-scale clearing of forests, often for agriculture, logging, or development. Because trees absorb carbon dioxide as they grow, removing large forests both releases stored carbon and reduces the planet's capacity to absorb future emissions. Tropical deforestation also destroys habitat for a large share of the world's biodiversity."},
+
+  {id:"nutrition", topic:"Health", title:"Nutrition Basics", text:"Balanced nutrition involves consuming adequate amounts of macronutrients, carbohydrates, proteins, and fats, along with vitamins and minerals. Diets high in whole foods, fiber, and unsaturated fats are generally associated with better long-term health outcomes than diets high in processed sugar and saturated fat. Individual needs vary with age, activity level, and health status."},
+  {id:"exercise", topic:"Health", title:"Exercise Physiology", text:"Regular physical activity strengthens the cardiovascular system, builds muscle and bone density, and improves insulin sensitivity. Aerobic exercise, like running or cycling, primarily trains the heart and lungs, while resistance training builds muscular strength. Both forms of exercise are linked to improved mood, partly through the release of endorphins."},
+  {id:"sleep", topic:"Health", title:"Sleep Science", text:"Sleep occurs in cycles of stages, including deep slow-wave sleep and REM sleep, each serving different restorative functions such as memory consolidation and physical repair. Chronic sleep deprivation is linked to impaired immune function, weight gain, and increased risk of cardiovascular disease. Most adults need roughly seven to nine hours per night."},
+  {id:"stress", topic:"Health", title:"Stress Management", text:"Chronic stress triggers sustained release of cortisol, which over time can suppress immune function and disrupt sleep and digestion. Techniques such as regular exercise, structured breathing, and adequate sleep help regulate the body's stress response. Unlike acute stress, which can sharpen focus briefly, chronic stress carries mainly negative long-term health effects."},
+];
+
+const STOPWORDS = new Set(("a an the of and or but if in on at to for with without from by is are was were be been being this that these those it its as than then so what which who how does do did doesn't don't can could would should will not no nor into about over under between within also such more most much many their his her they he she we you your our i".split(" ")));
+
+function tokenize(text){
+  return (text.toLowerCase().match(/[a-z0-9]+/g)||[]).filter(t=>t.length>2 && !STOPWORDS.has(t));
+}
+
+/* ---------------- TF-IDF index built once from CORPUS ---------------- */
+const INDEX = (function build(){
+  const docTokens = {};
+  const df = new Map();
+  CORPUS.forEach(d=>{
+    const toks = tokenize(d.title + " " + d.text);
+    docTokens[d.id] = toks;
+    new Set(toks).forEach(t=> df.set(t, (df.get(t)||0)+1));
+  });
+  const N = CORPUS.length;
+  const idf = new Map();
+  df.forEach((count,term)=> idf.set(term, Math.log(N/(1+count))+1));
+
+  function vectorize(tokens){
+    const tf = new Map();
+    tokens.forEach(t=> tf.set(t, (tf.get(t)||0)+1));
+    const vec = new Map();
+    tf.forEach((count,term)=>{
+      if(idf.has(term)) vec.set(term, count*idf.get(term));
+    });
+    let norm = 0;
+    vec.forEach(v=> norm += v*v);
+    norm = Math.sqrt(norm) || 1;
+    vec.forEach((v,k)=> vec.set(k, v/norm));
+    return vec;
+  }
+
+  const docVectors = {};
+  CORPUS.forEach(d=> docVectors[d.id] = vectorize(docTokens[d.id]));
+
+  return {docTokens, idf, vectorize, docVectors};
+})();
+
+function dot(a,b){
+  let s=0;
+  const [small,big] = a.size<b.size?[a,b]:[b,a];
+  small.forEach((v,k)=>{ if(big.has(k)) s += v*big.get(k); });
+  return s;
+}
+
+function retrieve(question, k=3){
+  const qTokens = tokenize(question);
+  const qVec = INDEX.vectorize(qTokens);
+  const scored = CORPUS.map(d=>{
+    const docVec = INDEX.docVectors[d.id];
+    const score = dot(qVec, docVec);
+    const docTokSet = new Set(INDEX.docTokens[d.id]);
+    const matched = [...new Set(qTokens)].filter(t=> docTokSet.has(t));
+    const missing = [...new Set(qTokens)].filter(t=> !docTokSet.has(t));
+    return {doc:d, score, matched, missing};
+  }).sort((a,b)=> b.score - a.score);
+
+  const retrieved = scored.slice(0,k).filter(s=>s.score>0);
+  const rest = scored.slice(retrieved.length);
+  const nearMisses = rest.slice(0,2);
+  return {qTokens, all: scored, retrieved, nearMisses};
+}
+
+/* ---------------------------------------------------------------
+   Claude API call — answer + claim-level grounding + reasoning
+----------------------------------------------------------------*/
+async function callClaude(question, retrievedDocs){
+  const context = retrievedDocs.map(r => `[${r.doc.id}] ${r.doc.title}: ${r.doc.text}`).join("\n\n");
+  const system = `You are the answer-generation stage of an explainable RAG pipeline. You will get a QUESTION and a set of RETRIEVED DOCUMENTS, each tagged with an id in brackets. Answer using ONLY information present in the retrieved documents. Then decompose your answer into 2-5 individual factual claims. For each claim, decide if it is directly supported by a specific retrieved document (cite its id) or not supported by the given documents. Also produce a short reasoning_path: 3-5 short phrases (each under 12 words) describing how you read the question and used the documents to build the answer. Give an overall confidence score 0-100 for how well the retrieved documents actually cover the question (low if the documents are only tangentially related). Respond with ONLY raw JSON, no markdown fences, no commentary, matching exactly this shape: {"reasoning_path": ["...", "..."], "answer": "...", "confidence": 0, "claims": [{"text":"...", "supported": true, "source_doc": "doc_id_or_null", "note": "..."}]}`;
+
+  const userMsg = `QUESTION: ${question}\n\nRETRIEVED DOCUMENTS:\n${context}`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      system,
+      messages: [{role:"user", content: userMsg}]
+    })
+  });
+  if(!response.ok) throw new Error("API request failed: " + response.status);
+  const data = await response.json();
+  const textBlock = (data.content||[]).map(c=>c.text||"").join("\n");
+  const cleaned = textBlock.replace(/```json|```/g,"").trim();
+  let parsed;
+  try{ parsed = JSON.parse(cleaned); }
+  catch(e){ throw new Error("Could not parse model output as JSON"); }
+  return parsed;
+}
+
+/* ---------------------------------------------------------------
+   Rendering
+----------------------------------------------------------------*/
+const el = id => document.getElementById(id);
+
+function setStep(name, state){ // state: 'active' | 'done'
+  const node = document.querySelector(`.pstep[data-step="${name}"]`);
+  if(!node) return;
+  node.classList.remove('active','done');
+  node.classList.add(state);
+}
+function resetPipeline(){
+  document.querySelectorAll('.pstep').forEach(n=> n.classList.remove('active','done'));
+}
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+
+function renderSpectrum(result){
+  const box = el('spectrum');
+  box.innerHTML = "";
+  const max = Math.max(...result.all.map(s=>s.score), 0.0001);
+  const retrievedIds = new Set(result.retrieved.map(r=>r.doc.id));
+  result.all.forEach(s=>{
+    const row = document.createElement('div');
+    row.className = 'spectrum-row' + (retrievedIds.has(s.doc.id) ? ' retrieved' : '');
+    row.innerHTML = `
+      <div class="title">${s.doc.title}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(s.score/max*100).toFixed(1)}%"></div></div>
+      <div class="score">${s.score.toFixed(3)}</div>`;
+    box.appendChild(row);
+  });
+  const minRetrievedScore = result.retrieved.length ? Math.min(...result.retrieved.map(r=>r.score)) : 0;
+  el('thresholdNote').textContent = `Top ${result.retrieved.length} document(s) selected · cutoff similarity ≈ ${minRetrievedScore.toFixed(3)} · cosine similarity over TF-IDF vectors, computed locally`;
+}
+
+function renderDocExplain(result){
+  const box = el('docExplain');
+  box.innerHTML = "";
+  result.retrieved.forEach(r=>{
+    const card = document.createElement('div');
+    card.className = 'doc-card retrieved';
+    card.innerHTML = `
+      <div class="dtitle">✓ ${r.doc.title} <span style="font-family:var(--mono);font-weight:400;font-size:11px;color:var(--ink-faint)">(${r.doc.topic})</span></div>
+      <div class="dtext">${r.doc.text}</div>
+      <div class="why">RETRIEVED — score ${r.score.toFixed(3)}. Shared terms: ${r.matched.length ? r.matched.map(t=>`<span class="term-chip">${t}</span>`).join("") : "—"}</div>`;
+    box.appendChild(card);
+  });
+  result.nearMisses.forEach(r=>{
+    const card = document.createElement('div');
+    card.className = 'doc-card rejected';
+    card.innerHTML = `
+      <div class="dtitle">${r.doc.title} <span style="font-family:var(--mono);font-weight:400;font-size:11px;color:var(--ink-faint)">(${r.doc.topic})</span></div>
+      <div class="dtext">${r.doc.text}</div>
+      <div class="why">NOT RETRIEVED — score ${r.score.toFixed(3)}, below cutoff. ${r.matched.length ? `Shares terms: ${r.matched.map(t=>`<span class="term-chip">${t}</span>`).join("")}, but ` : ""}missing query terms: ${r.missing.length ? r.missing.map(t=>`<span class="term-chip">${t}</span>`).join("") : "(low overlap overall)"}</div>`;
+    box.appendChild(card);
+  });
+}
+
+function renderAnswer(data){
+  el('answerText').textContent = data.answer || "(no answer returned)";
+  const conf = Math.max(0, Math.min(100, Math.round(data.confidence||0)));
+  el('confVal').textContent = conf + "%";
+  const confGauge = el('confGauge');
+  confGauge.style.width = conf+"%";
+  confGauge.style.background = conf>=70?'var(--evidence)':conf>=40?'var(--amber)':'var(--brick)';
+
+  const claims = data.claims || [];
+  const unsupported = claims.filter(c=>!c.supported).length;
+  const halPct = claims.length ? Math.round(100*unsupported/claims.length) : 0;
+  el('halVal').textContent = halPct + "%";
+  const halGauge = el('halGauge');
+  halGauge.style.width = halPct+"%";
+  halGauge.style.background = halPct<=15?'var(--evidence)':halPct<=45?'var(--amber)':'var(--brick)';
+}
+
+function renderClaims(claims){
+  const box = el('claims');
+  box.innerHTML = "";
+  (claims||[]).forEach(c=>{
+    const row = document.createElement('div');
+    row.className = 'claim ' + (c.supported ? 'supported':'unsupported');
+    row.innerHTML = `
+      <div class="flag">${c.supported? '✓':'!'}</div>
+      <div>
+        <div class="ctext">${c.text}</div>
+        <div class="cnote">${c.supported ? `grounded in [${c.source_doc||'?'}]` : 'not directly supported by retrieved documents'}${c.note ? ' — '+c.note : ''}</div>
+      </div>`;
+    box.appendChild(row);
+  });
+  if(!claims || !claims.length){ box.innerHTML = '<div class="skeleton">No claims returned.</div>'; }
+}
+
+function renderTrace(result, modelPath){
+  const box = el('trace');
+  box.innerHTML = "";
+  const steps = [];
+  steps.push(`Tokenized question into query terms: ${result.qTokens.length ? result.qTokens.join(", ") : "(none — check phrasing)"}`);
+  steps.push(`Computed TF-IDF cosine similarity against all ${CORPUS.length} corpus documents`);
+  steps.push(`Selected top ${result.retrieved.length} document(s): ${result.retrieved.map(r=>r.doc.title).join(", ") || "none above zero"}`);
+  if(result.nearMisses.length){
+    steps.push(`Excluded near-miss document(s): ${result.nearMisses.map(r=>r.doc.title).join(", ")} — insufficient term overlap`);
+  }
+  (modelPath||[]).forEach(s=> steps.push(s));
+  steps.push(`Cross-checked each answer claim against retrieved source text to compute grounding`);
+
+  steps.forEach((s,i)=>{
+    const step = document.createElement('div');
+    step.className = 'trace-step';
+    step.innerHTML = `<div class="tnum">STEP ${String(i+1).padStart(2,'0')}</div><div class="ttext">${s}</div>`;
+    box.appendChild(step);
+  });
+}
+
+/* ---------------------------------------------------------------
+   Orchestration
+----------------------------------------------------------------*/
+async function runPipeline(question){
+  const btn = el('runBtn');
+  const errBox = el('errorBox');
+  errBox.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  resetPipeline();
+  el('results').style.display = 'none';
+
+  try{
+    setStep('question','active');
+    await sleep(220);
+    setStep('question','done');
+
+    setStep('retriever','active');
+    await sleep(200);
+    const result = retrieve(question, 3);
+    setStep('retriever','done');
+
+    setStep('documents','active');
+    renderSpectrum(result);
+    renderDocExplain(result);
+    await sleep(180);
+    setStep('documents','done');
+
+    if(result.retrieved.length === 0){
+      throw new Error("No documents matched this question closely enough. Try one of the example questions, or ask something closer to the demo corpus topics (space, programming languages, ancient civilizations, climate, health).");
+    }
+
+    setStep('llm','active');
+    const data = await callClaude(question, result.retrieved.map(r=>r));
+    setStep('llm','done');
+
+    setStep('answer','active');
+    renderAnswer(data);
+    await sleep(150);
+    setStep('answer','done');
+
+    setStep('explanation','active');
+    renderClaims(data.claims);
+    renderTrace(result, data.reasoning_path);
+    await sleep(150);
+    setStep('explanation','done');
+
+    el('results').style.display = 'block';
+  }catch(err){
+    console.error(err);
+    errBox.textContent = "⚠ " + err.message;
+    errBox.style.display = 'block';
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Run';
+  }
+}
+
+/* ---------------- wiring ---------------- */
+const EXAMPLES = [
+  "How does Rust manage memory without a garbage collector?",
+  "What caused the collapse of the Roman Empire?",
+  "How does poor sleep affect the immune system?",
+  "Compare the atmospheres of Jupiter and Saturn.",
+  "How is ocean acidification different from global warming?"
+];
+const chipBox = el('chips');
+EXAMPLES.forEach(q=>{
+  const c = document.createElement('div');
+  c.className = 'chip';
+  c.textContent = q;
+  c.onclick = ()=>{ el('qinput').value = q; runPipeline(q); };
+  chipBox.appendChild(c);
+});
+
+el('runBtn').addEventListener('click', ()=>{
+  const q = el('qinput').value.trim();
+  if(q) runPipeline(q);
+});
+el('qinput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter'){ const q = el('qinput').value.trim(); if(q) runPipeline(q); }
+});
+</script>
+</body>
+</html>
